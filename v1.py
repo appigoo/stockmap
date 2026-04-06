@@ -300,23 +300,29 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    # initialise input keys
+    if "new_name"   not in st.session_state: st.session_state["new_name"]   = ""
+    if "new_ticker" not in st.session_state: st.session_state["new_ticker"] = ""
+
     add_col1, add_col2 = st.columns(2)
     with add_col1:
-        new_name   = st.text_input("顯示名稱", placeholder="e.g. AMD",   key="new_name",   label_visibility="visible")
+        st.text_input("顯示名稱", placeholder="e.g. AMD", key="new_name")
     with add_col2:
-        new_ticker = st.text_input("Ticker",   placeholder="e.g. AMD",   key="new_ticker", label_visibility="visible")
+        st.text_input("Ticker",   placeholder="e.g. AMD", key="new_ticker")
 
-    if st.button("新增", key="btn_add"):
-        n = new_name.strip()
-        t = new_ticker.strip().upper()
+    if st.button("新增 ＋", key="btn_add"):
+        n = st.session_state["new_name"].strip()
+        t = st.session_state["new_ticker"].strip().upper()
         if not n or not t:
             st.error("請填入名稱與 Ticker")
         elif t in st.session_state.custom_assets.values():
             st.warning(f"{t} 已在清單中")
         else:
             st.session_state.custom_assets[n] = t
-            st.success(f"已新增 {n} ({t})")
-            st.cache_data.clear()   # force re-fetch
+            st.session_state["new_name"]   = ""
+            st.session_state["new_ticker"] = ""
+            st.cache_data.clear()
+            st.rerun()
 
     # ── Current list with remove buttons ────────────────────────────────────────
     if st.session_state.custom_assets:
