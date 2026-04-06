@@ -231,8 +231,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ── ASSETS ─────────────────────────────────────────────────────────────────────
-ASSETS = {
+# ── DEFAULT ASSETS ──────────────────────────────────────────────────────────────
+DEFAULT_ASSETS = {
     "TESLA":            "TSLA",
     "APPLE":            "AAPL",
     "NVIDIA":           "NVDA",
@@ -267,6 +267,10 @@ ASSETS = {
     "那斯達克100(大型科技)": "QQQ",
 }
 
+# initialise session-state asset list once
+if "custom_assets" not in st.session_state:
+    st.session_state.custom_assets = dict(DEFAULT_ASSETS)
+
 # ── SIDEBAR ─────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
@@ -286,6 +290,65 @@ with st.sidebar:
     )
     save_folder = st.text_input("CSV 存放資料夾", value="data")
     os.makedirs(save_folder, exist_ok=True)
+
+    # ── Add custom ticker ───────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="font-family:'Space Mono',monospace;font-size:.62rem;letter-spacing:.18em;
+                text-transform:uppercase;color:#3d4d5c;margin:1.6rem 0 .8rem;
+                padding-bottom:.8rem;border-bottom:1px solid #1a2230;">
+        ＋ 新增股票
+    </div>
+    """, unsafe_allow_html=True)
+
+    add_col1, add_col2 = st.columns(2)
+    with add_col1:
+        new_name   = st.text_input("顯示名稱", placeholder="e.g. AMD",   key="new_name",   label_visibility="visible")
+    with add_col2:
+        new_ticker = st.text_input("Ticker",   placeholder="e.g. AMD",   key="new_ticker", label_visibility="visible")
+
+    if st.button("新增", key="btn_add"):
+        n = new_name.strip()
+        t = new_ticker.strip().upper()
+        if not n or not t:
+            st.error("請填入名稱與 Ticker")
+        elif t in st.session_state.custom_assets.values():
+            st.warning(f"{t} 已在清單中")
+        else:
+            st.session_state.custom_assets[n] = t
+            st.success(f"已新增 {n} ({t})")
+            st.cache_data.clear()   # force re-fetch
+
+    # ── Current list with remove buttons ────────────────────────────────────────
+    if st.session_state.custom_assets:
+        st.markdown("""
+        <div style="font-family:'Space Mono',monospace;font-size:.62rem;letter-spacing:.18em;
+                    text-transform:uppercase;color:#3d4d5c;margin:.8rem 0 .5rem;">
+            當前清單
+        </div>
+        """, unsafe_allow_html=True)
+
+        to_remove = None
+        for name, ticker in list(st.session_state.custom_assets.items()):
+            c1, c2, c3 = st.columns([3, 2, 1])
+            c1.markdown(
+                f'<span style="font-family:monospace;font-size:.72rem;color:#8b95a5;">{name}</span>',
+                unsafe_allow_html=True)
+            c2.markdown(
+                f'<span style="font-family:monospace;font-size:.72rem;color:#4af0a0;">{ticker}</span>',
+                unsafe_allow_html=True)
+            if c3.button("✕", key=f"rm_{ticker}"):
+                to_remove = name
+
+        if to_remove:
+            del st.session_state.custom_assets[to_remove]
+            st.cache_data.clear()
+            st.rerun()
+
+    # ── Reset ───────────────────────────────────────────────────────────────────
+    if st.button("↺ 重置為預設", key="btn_reset"):
+        st.session_state.custom_assets = dict(DEFAULT_ASSETS)
+        st.cache_data.clear()
+        st.rerun()
 
     st.markdown("""
     <div style="margin-top:2rem;font-family:'Space Mono',monospace;
@@ -388,7 +451,7 @@ def quarter_start(today):
     return date(today.year, 3*(q-1)+1, 1)
 
 
-def compute_changes(hist_map):
+def compute_changes(hist_map, assets_map=None):
     rows   = []
     today  = date.today()
     targets = {
@@ -399,7 +462,8 @@ def compute_changes(hist_map):
         "QTD":  quarter_start(today),
         "YTD":  date(today.year, 1, 1),
     }
-    for name, tk in ASSETS.items():
+    assets_map = assets_map or DEFAULT_ASSETS
+    for name, tk in assets_map.items():
         hist   = hist_map.get(tk, pd.DataFrame())
         latest = hist["Close"].iloc[-1] if (not hist.empty and "Close" in hist.columns) else np.nan
         changes = {}
@@ -470,8 +534,8 @@ with col_btn:
 
 if run:
     with st.spinner("拉取市場資料中…"):
-        hist_map = fetch_history(list(ASSETS.values()), start_of_fetch)
-        df       = compute_changes(hist_map)
+        hist_map = fetch_history(list(st.session_state.custom_assets.values()), start_of_fetch)
+        df       = compute_changes(hist_map, st.session_state.custom_assets)
 
     # summary chips
     render_chips(df)
