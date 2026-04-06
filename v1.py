@@ -439,7 +439,7 @@ if run:
     # summary chips
     render_chips(df)
 
-    # table
+    # ── table ──
     style_cols = ["1日", "1週", "1月", "1年", "QTD", "YTD"]
     styled = (
         df.style
@@ -448,41 +448,82 @@ if run:
           .set_properties(**{
               "text-align":       "center",
               "font-family":      "'Space Mono', monospace",
-              "font-size":        "0.78rem",
-              "background-color": "#0a0c10",
+              "font-size":        "0.8rem",
+              "background-color": "#0c0f14",
               "color":            "#8b95a5",
-              "border":           "1px solid #111820",
           }, subset=style_cols)
           .set_properties(**{
               "text-align":       "left",
               "font-family":      "'Syne', sans-serif",
-              "font-size":        "0.82rem",
-              "background-color": "#0a0c10",
+              "font-size":        "0.84rem",
+              "font-weight":      "600",
+              "background-color": "#0c0f14",
+              "color":            "#dde2ea",
+          }, subset=pd.IndexSlice[:, ["Ticker"]])
+          .set_properties(**{
+              "text-align":       "right",
+              "font-family":      "'Space Mono', monospace",
+              "font-size":        "0.8rem",
+              "background-color": "#0c0f14",
               "color":            "#c8ccd6",
-          }, subset=["Ticker", "收盤"])
-          .set_table_styles([{
-              "selector": "th",
-              "props": [
-                  ("background-color", "#0d1017"),
-                  ("color",            "#3d4d5c"),
-                  ("font-family",      "'Space Mono', monospace"),
-                  ("font-size",        "0.65rem"),
-                  ("letter-spacing",   ".12em"),
-                  ("text-transform",   "uppercase"),
-                  ("border-bottom",    "1px solid #1a2230"),
-                  ("padding",          "10px 14px"),
-              ],
-          }, {
-              "selector": "td",
-              "props": [("padding", "9px 14px"), ("border-bottom", "1px solid #0e1319")],
-          }, {
-              "selector": "tr:hover td",
-              "props": [("background-color", "#0e1319 !important")],
-          }])
+          }, subset=pd.IndexSlice[:, ["收盤"]])
+          .set_table_styles([
+              {"selector": "table",
+               "props": [("border-collapse","separate"),("border-spacing","0"),("width","100%")]},
+              {"selector": "thead tr",
+               "props": [("background-color","#080b0f")]},
+              {"selector": "th",
+               "props": [
+                   ("background-color","#080b0f"),("color","#3d5060"),
+                   ("font-family","'Space Mono', monospace"),("font-size","0.62rem"),
+                   ("letter-spacing",".15em"),("text-transform","uppercase"),
+                   ("border-bottom","2px solid #1a2535"),("border-right","1px solid #0f1620"),
+                   ("padding","12px 16px"),("white-space","nowrap"),
+               ]},
+              {"selector": "th:last-child",
+               "props": [("border-right","none")]},
+              {"selector": "td",
+               "props": [
+                   ("padding","10px 16px"),("border-bottom","1px solid #0d1018"),
+                   ("border-right","1px solid #0d1018"),("white-space","nowrap"),
+               ]},
+              {"selector": "td:last-child",
+               "props": [("border-right","none")]},
+              {"selector": "tr:hover td",
+               "props": [("background-color","#0f151e !important"),("transition","background-color .12s ease")]},
+              {"selector": "tr:nth-child(even) td",
+               "props": [("background-color","#0a0d12")]},
+              {"selector": "th.index_name, td.row_heading",
+               "props": [
+                   ("background-color","#0a0d12"),("color","#c8ccd6"),
+                   ("font-family","'Syne', sans-serif"),("font-size","0.82rem"),
+                   ("font-weight","600"),("border-right","2px solid #1a2535 !important"),
+                   ("min-width","160px"),
+               ]},
+          ])
     )
 
+    table_css = """
+    <style>
+    .heatmap-wrap {
+        overflow-x: auto;
+        border: 1px solid #141c28;
+        border-radius: 10px;
+        box-shadow: 0 4px 40px rgba(0,0,0,.6), 0 0 0 1px #0d1522;
+        background: #0c0f14;
+        margin-top: .5rem;
+    }
+    .heatmap-wrap table { margin: 0; }
+    .heatmap-wrap::-webkit-scrollbar { height: 6px; }
+    .heatmap-wrap::-webkit-scrollbar-track { background: #080b0f; }
+    .heatmap-wrap::-webkit-scrollbar-thumb { background: #1e2d40; border-radius: 3px; }
+    .heatmap-wrap::-webkit-scrollbar-thumb:hover { background: #2e4060; }
+    </style>
+    """
+
     st.markdown('<div class="section-title">資產表現一覽</div>', unsafe_allow_html=True)
-    st.dataframe(styled, use_container_width=True, height=880)
+    st.markdown(table_css + f'<div class="heatmap-wrap">{styled.to_html()}</div>',
+                unsafe_allow_html=True)
 
     # save & download
     csv_file = f"market_heatmap_{date.today().isoformat()}.csv"
