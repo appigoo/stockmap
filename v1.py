@@ -443,7 +443,7 @@ if run:
     style_cols = ["1日", "1週", "1月", "1年", "QTD", "YTD"]
     styled = (
         df.style
-          .applymap(colorize, subset=style_cols)
+          .map(colorize, subset=style_cols)
           .format({"收盤": "{:.4f}", **{c: "{:+.2f}%" for c in style_cols}}, na_rep="—")
           .set_properties(**{
               "text-align":       "center",
