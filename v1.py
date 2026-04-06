@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -725,7 +726,31 @@ if run:
     """
 
     st.markdown('<div class="section-title">資產表現一覽 <span style="font-size:.65rem;color:#3d5060;letter-spacing:.1em;">· 點擊欄標題排序</span></div>', unsafe_allow_html=True)
-    st.markdown(table_html, unsafe_allow_html=True)
+    n_rows = len(df)
+    iframe_height = max(400, n_rows * 42 + 80)
+    full_html = f"""<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:#0c0f14; overflow-x:auto; }}
+  .heatmap-wrap {{
+    overflow-x:auto; background:#0c0f14;
+    border:1px solid #141c28; border-radius:10px;
+    box-shadow:0 4px 40px rgba(0,0,0,.6);
+  }}
+  .heatmap-wrap::-webkit-scrollbar {{ height:6px; }}
+  .heatmap-wrap::-webkit-scrollbar-track {{ background:#080b0f; }}
+  .heatmap-wrap::-webkit-scrollbar-thumb {{ background:#1e2d40; border-radius:3px; }}
+  .th-inner {{ display:flex; align-items:center; gap:6px; }}
+  .sort-icon {{ font-size:.75rem; color:#3d5060; transition:color .15s; }}
+  th:hover .sort-icon {{ color:#8b95a5; }}
+  tr {{ transition:background .1s; }}
+</style>
+</head><body>
+{table_html}
+</body></html>"""
+    components.html(full_html, height=iframe_height, scrolling=True)
 
     # save & download
     csv_file = f"market_heatmap_{date.today().isoformat()}.csv"
