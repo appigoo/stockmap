@@ -209,6 +209,21 @@ st.markdown("""
     50%      { opacity:.7; box-shadow: 0 0 0 5px rgba(74,240,160,0); }
   }
 
+  /* heatmap-wrap container */
+  .heatmap-wrap {
+    overflow-x: auto;
+    border: 1px solid #141c28;
+    border-radius: 10px;
+    box-shadow: 0 4px 40px rgba(0,0,0,.6), 0 0 0 1px #0d1522;
+    background: #0c0f14;
+    margin-top: .5rem;
+  }
+  .heatmap-wrap table { margin: 0 !important; }
+  .heatmap-wrap::-webkit-scrollbar { height: 6px; }
+  .heatmap-wrap::-webkit-scrollbar-track { background: #080b0f; }
+  .heatmap-wrap::-webkit-scrollbar-thumb { background: #1e2d40; border-radius: 3px; }
+  .heatmap-wrap::-webkit-scrollbar-thumb:hover { background: #2e4060; }
+
   /* ── Hide Streamlit chrome ── */
   #MainMenu, footer, header { visibility: hidden; }
   .reportview-container .main footer { visibility: hidden; }
@@ -503,27 +518,7 @@ if run:
           ])
     )
 
-    table_css = """
-    <style>
-    .heatmap-wrap {
-        overflow-x: auto;
-        border: 1px solid #141c28;
-        border-radius: 10px;
-        box-shadow: 0 4px 40px rgba(0,0,0,.6), 0 0 0 1px #0d1522;
-        background: #0c0f14;
-        margin-top: .5rem;
-    }
-    .heatmap-wrap table { margin: 0; }
-    .heatmap-wrap::-webkit-scrollbar { height: 6px; }
-    .heatmap-wrap::-webkit-scrollbar-track { background: #080b0f; }
-    .heatmap-wrap::-webkit-scrollbar-thumb { background: #1e2d40; border-radius: 3px; }
-    .heatmap-wrap::-webkit-scrollbar-thumb:hover { background: #2e4060; }
-    </style>
-    """
-
-    st.markdown('<div class="section-title">資產表現一覽</div>', unsafe_allow_html=True)
-    st.markdown(table_css + f'<div class="heatmap-wrap">{styled.to_html()}</div>',
-                unsafe_allow_html=True)
+    st.markdown(f'<div class="heatmap-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
 
     # save & download
     csv_file = f"market_heatmap_{date.today().isoformat()}.csv"
