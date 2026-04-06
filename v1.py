@@ -454,71 +454,73 @@ if run:
     # summary chips
     render_chips(df)
 
-    # ── table ──
+    # ── build pure HTML table ──
     style_cols = ["1日", "1週", "1月", "1年", "QTD", "YTD"]
-    styled = (
-        df.style
-          .map(colorize, subset=style_cols)
-          .format({"收盤": "{:.4f}", **{c: "{:+.2f}%" for c in style_cols}}, na_rep="—")
-          .set_properties(**{
-              "text-align":       "center",
-              "font-family":      "'Space Mono', monospace",
-              "font-size":        "0.8rem",
-              "background-color": "#0c0f14",
-              "color":            "#8b95a5",
-          }, subset=style_cols)
-          .set_properties(**{
-              "text-align":       "left",
-              "font-family":      "'Syne', sans-serif",
-              "font-size":        "0.84rem",
-              "font-weight":      "600",
-              "background-color": "#0c0f14",
-              "color":            "#dde2ea",
-          }, subset=pd.IndexSlice[:, ["Ticker"]])
-          .set_properties(**{
-              "text-align":       "right",
-              "font-family":      "'Space Mono', monospace",
-              "font-size":        "0.8rem",
-              "background-color": "#0c0f14",
-              "color":            "#c8ccd6",
-          }, subset=pd.IndexSlice[:, ["收盤"]])
-          .set_table_styles([
-              {"selector": "table",
-               "props": [("border-collapse","separate"),("border-spacing","0"),("width","100%")]},
-              {"selector": "thead tr",
-               "props": [("background-color","#080b0f")]},
-              {"selector": "th",
-               "props": [
-                   ("background-color","#080b0f"),("color","#3d5060"),
-                   ("font-family","'Space Mono', monospace"),("font-size","0.62rem"),
-                   ("letter-spacing",".15em"),("text-transform","uppercase"),
-                   ("border-bottom","2px solid #1a2535"),("border-right","1px solid #0f1620"),
-                   ("padding","12px 16px"),("white-space","nowrap"),
-               ]},
-              {"selector": "th:last-child",
-               "props": [("border-right","none")]},
-              {"selector": "td",
-               "props": [
-                   ("padding","10px 16px"),("border-bottom","1px solid #0d1018"),
-                   ("border-right","1px solid #0d1018"),("white-space","nowrap"),
-               ]},
-              {"selector": "td:last-child",
-               "props": [("border-right","none")]},
-              {"selector": "tr:hover td",
-               "props": [("background-color","#0f151e !important"),("transition","background-color .12s ease")]},
-              {"selector": "tr:nth-child(even) td",
-               "props": [("background-color","#0a0d12")]},
-              {"selector": "th.index_name, td.row_heading",
-               "props": [
-                   ("background-color","#0a0d12"),("color","#c8ccd6"),
-                   ("font-family","'Syne', sans-serif"),("font-size","0.82rem"),
-                   ("font-weight","600"),("border-right","2px solid #1a2535 !important"),
-                   ("min-width","160px"),
-               ]},
-          ])
-    )
+    all_cols   = ["Ticker", "收盤"] + style_cols
 
-    st.markdown(f'<div class="heatmap-wrap">{styled.to_html()}</div>', unsafe_allow_html=True)
+    def cell_style(val, col):
+        base = "padding:10px 18px;border-bottom:1px solid #0d1018;border-right:1px solid #0d1018;white-space:nowrap;font-family:'Space Mono',monospace;font-size:0.8rem;"
+        if col in style_cols:
+            if pd.isna(val):
+                return base + "color:#2a3540;text-align:center;"
+            v = float(val)
+            if v > 0:
+                intensity = min(abs(v)/15, 1)
+                a = 0.08 + 0.28*intensity
+                return base + f"background:rgba(74,240,160,{a:.2f});color:#4af0a0;font-weight:700;text-align:center;"
+            elif v < 0:
+                intensity = min(abs(v)/15, 1)
+                a = 0.08 + 0.28*intensity
+                return base + f"background:rgba(240,90,74,{a:.2f});color:#f05a4a;font-weight:700;text-align:center;"
+            return base + "color:#556070;text-align:center;"
+        if col == "Ticker":
+            return base + "color:#dde2ea;font-weight:700;font-family:'Syne',sans-serif;font-size:0.88rem;"
+        if col == "收盤":
+            return base + "color:#c8ccd6;text-align:right;"
+        return base + "color:#8b95a5;"
+
+    def fmt(val, col):
+        if pd.isna(val): return "—"
+        if col == "收盤":  return f"{val:.4f}"
+        if col in style_cols: return f"{val:+.2f}%"
+        return str(val)
+
+    rows_html = ""
+    for i, (asset, row) in enumerate(df.iterrows()):
+        bg = "#0a0d12" if i % 2 == 1 else "#0c0f14"
+        # index cell (asset name)
+        idx_style = (f"padding:10px 18px;background:{bg};color:#c8ccd6;"
+                     "font-family:'Syne',sans-serif;font-size:0.84rem;font-weight:600;"
+                     "border-bottom:1px solid #0d1018;border-right:2px solid #1a2535;"
+                     "white-space:nowrap;min-width:150px;")
+        cells = f'<td style="{idx_style}">{asset}</td>'
+        for col in all_cols:
+            val = row[col]
+            s   = cell_style(val, col)
+            s  += f"background-color:{bg};" if col not in style_cols or pd.isna(val) or float(val if not pd.isna(val) else 0) == 0 else ""
+            cells += f'<td style="{s}">{fmt(val, col)}</td>'
+        rows_html += f'<tr style="background:{bg};">{cells}</tr>\n'
+
+    th_style = ("background:#080b0f;color:#3d5060;font-family:'Space Mono',monospace;"
+                "font-size:0.6rem;letter-spacing:.15em;text-transform:uppercase;"
+                "padding:13px 18px;border-bottom:2px solid #1a2535;"
+                "border-right:1px solid #0f1620;white-space:nowrap;")
+    th_idx   = th_style + "min-width:150px;border-right:2px solid #1a2535;"
+    headers  = f'<th style="{th_idx}">資產</th>'
+    for col in all_cols:
+        headers += f'<th style="{th_style}">{col}</th>'
+
+    table_html = f"""
+    <div class="heatmap-wrap">
+      <table style="border-collapse:collapse;width:100%;table-layout:auto;">
+        <thead><tr>{headers}</tr></thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+    </div>
+    """
+
+    st.markdown('<div class="section-title">資產表現一覽</div>', unsafe_allow_html=True)
+    st.markdown(table_html, unsafe_allow_html=True)
 
     # save & download
     csv_file = f"market_heatmap_{date.today().isoformat()}.csv"
