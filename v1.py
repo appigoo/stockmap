@@ -325,25 +325,47 @@ def to_ny_aware(dt):
 
 
 # ── DATA FETCH ──────────────────────────────────────────────────────────────────
+import time, random
+
+def _fetch_one(tk, start_date, end_date, retries=4):
+    """Fetch single ticker with exponential back-off on rate-limit errors."""
+    for attempt in range(retries):
+        try:
+            hist = yf.Ticker(tk).history(
+                start=start_date, end=end_date, raise_errors=False
+            )
+            return hist
+        except Exception as e:
+            msg = str(e).lower()
+            if "too many requests" in msg or "rate limit" in msg or "429" in msg:
+                wait = (2 ** attempt) + random.uniform(0.5, 2.0)
+                time.sleep(wait)
+            else:
+                raise
+    return pd.DataFrame()   # give up after retries
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_history(tickers, start_date):
     data = {}
     start_ny = to_ny_aware(start_date)
     end_ny   = to_ny_aware(date.today() + timedelta(days=1))
-    for tk in tickers:
+    s = start_ny.date() if start_ny else None
+    e = end_ny.date()   if end_ny   else None
+
+    for i, tk in enumerate(tickers):
+        # polite delay between every request (0.3-0.8 s)
+        if i > 0:
+            time.sleep(random.uniform(0.3, 0.8))
         try:
-            hist = yf.Ticker(tk).history(
-                start=start_ny.date() if start_ny else None,
-                end=end_ny.date()   if end_ny   else None,
-                raise_errors=False,
-            )
+            hist = _fetch_one(tk, s, e)
             if not hist.empty:
                 hist.index = (hist.index.tz_localize(NY_TZ)
                               if hist.index.tz is None
                               else hist.index.tz_convert(NY_TZ))
             data[tk] = hist
-        except Exception as e:
-            st.warning(f"抓取 {tk} 失敗：{e}")
+        except Exception as ex:
+            st.warning(f"抓取 {tk} 失敗：{ex}")
             data[tk] = pd.DataFrame()
     return data
 
