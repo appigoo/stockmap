@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -541,216 +540,76 @@ if run:
     # summary chips
     render_chips(df)
 
-    # ── build sortable pure HTML table ──
+    # ── table: st.dataframe with Styler (native sort + colour) ──
     style_cols = ["1日", "1週", "1月", "1年", "QTD", "YTD"]
-    all_cols   = ["Ticker", "收盤"] + style_cols
 
-    def cell_bg(val, col):
-        """Return inline background+color style for a pct cell."""
-        if col not in style_cols or pd.isna(val):
-            return ""
-        v = float(val)
+    # format display copy
+    fmt_df = df.copy()
+    for c in style_cols:
+        fmt_df[c] = df[c].apply(lambda v: f"{v:+.2f}%" if pd.notna(v) else "—")
+    fmt_df["收盤"] = df["收盤"].apply(lambda v: f"{v:.4f}" if pd.notna(v) else "—")
+
+    # keep numeric df for colouring
+    def highlight(val):
+        """Cell-level colour for pct columns."""
+        try:
+            v = float(str(val).replace("%","").replace("+",""))
+        except Exception:
+            return "background-color:#0e1319;color:#2a3540;"
         if v > 0:
-            a = 0.08 + 0.28 * min(abs(v)/15, 1)
-            return f"background:rgba(74,240,160,{a:.2f});color:#4af0a0;font-weight:700;"
+            a = round(0.08 + 0.28 * min(abs(v)/15, 1), 2)
+            return (f"background-color:rgba(74,240,160,{a});"
+                    f"color:#4af0a0;font-weight:700;text-align:center;")
         elif v < 0:
-            a = 0.08 + 0.28 * min(abs(v)/15, 1)
-            return f"background:rgba(240,90,74,{a:.2f});color:#f05a4a;font-weight:700;"
-        return ""
+            a = round(0.08 + 0.28 * min(abs(v)/15, 1), 2)
+            return (f"background-color:rgba(240,90,74,{a});"
+                    f"color:#f05a4a;font-weight:700;text-align:center;")
+        return "background-color:#0e1319;color:#556070;text-align:center;"
 
-    def fmt(val, col):
-        if pd.isna(val): return "—"
-        if col == "收盤":  return f"{val:.4f}"
-        if col in style_cols: return f"{val:+.2f}%"
-        return str(val)
+    def base_cell(val):
+        return ("background-color:#0c0f14;color:#c8ccd6;"
+                "font-family:'Space Mono',monospace;font-size:0.8rem;")
 
-    # serialise rows as JS array for client-side sort
-    import json
-    js_rows = []
-    for asset, row in df.iterrows():
-        r = {"_asset": asset}
-        for col in all_cols:
-            v = row[col]
-            r[col] = None if pd.isna(v) else v
-        js_rows.append(r)
-
-    th_base = ("background:#080b0f;color:#3d5060;font-family:'Space Mono',monospace;"
-               "font-size:0.6rem;letter-spacing:.15em;text-transform:uppercase;"
-               "padding:13px 18px;border-bottom:2px solid #1a2535;"
-               "border-right:1px solid #0f1620;white-space:nowrap;"
-               "cursor:pointer;user-select:none;")
-    th_idx = th_base + "min-width:150px;border-right:2px solid #1a2535;cursor:default;"
-
-    col_headers = "".join(
-        f'<th onclick="sortTable({i+1})" style="{th_base}" title="點擊排序">' +
-        f'<span class="th-inner">{col} <span class="sort-icon" id="si{i+1}">⇅</span></span></th>'
-        for i, col in enumerate(["資產"] + all_cols)
+    styled = (
+        fmt_df.style
+            .map(highlight,  subset=style_cols)
+            .map(base_cell,  subset=["收盤"])
+            .set_properties(**{
+                "background-color": "#0c0f14",
+                "color":            "#dde2ea",
+                "font-weight":      "600",
+            }, subset=["Ticker"])
+            .set_table_styles([
+                {"selector": "th",
+                 "props": [
+                     ("background-color", "#080b0f"),
+                     ("color",            "#4af0a0"),
+                     ("font-size",        "0.68rem"),
+                     ("letter-spacing",   ".12em"),
+                     ("text-transform",   "uppercase"),
+                     ("border-bottom",    "2px solid #1a2535"),
+                     ("padding",          "10px 14px"),
+                 ]},
+                {"selector": "td",
+                 "props": [
+                     ("padding",       "9px 14px"),
+                     ("border-bottom", "1px solid #0d1018"),
+                 ]},
+                {"selector": "tr:nth-child(even) td",
+                 "props": [("background-color", "#0a0d12")]},
+                {"selector": "tr:hover td",
+                 "props": [("filter", "brightness(1.15)")]},
+                {"selector": "table",
+                 "props": [("border-collapse", "collapse"), ("width", "100%")]},
+            ])
+            .set_properties(**{"background-color": "#0a0c10"})
     )
-    # asset col not sortable by JS index (it's col 0 = text)
-    headers_html = (
-        f'<th style="{th_idx}" onclick="sortTable(0)" title="點擊排序">'
-        f'<span class="th-inner">資產 <span class="sort-icon" id="si0">⇅</span></span></th>'
-    ) + "".join(
-        f'<th onclick="sortTable({i+1})" style="{th_base}" title="點擊排序">'
-        f'<span class="th-inner">{col} <span class="sort-icon" id="si{i+1}">⇅</span></span></th>'
-        for i, col in enumerate(all_cols)
+
+    st.markdown(
+        '<div class="section-title">資產表現一覽 '        '<span style="font-size:.65rem;color:#3d5060;letter-spacing:.1em;">'        '· 點擊欄標題排序</span></div>',
+        unsafe_allow_html=True
     )
-
-    # pre-render rows (colours come from data-val attributes via JS re-render)
-    def render_rows(rows, stripe=True):
-        out = ""
-        for i, r in enumerate(rows):
-            bg = "#0a0d12" if stripe and i % 2 == 1 else "#0c0f14"
-            idx_s = (f"padding:10px 18px;background:{bg};color:#c8ccd6;"
-                     "font-family:'Syne',sans-serif;font-size:0.84rem;font-weight:600;"
-                     "border-bottom:1px solid #0d1018;border-right:2px solid #1a2535;"
-                     "white-space:nowrap;min-width:150px;")
-            cells = f'<td style="{idx_s}">{r["_asset"]}</td>'
-            for col in all_cols:
-                v = r[col]
-                base = ("padding:10px 18px;border-bottom:1px solid #0d1018;"
-                        "border-right:1px solid #0d1018;white-space:nowrap;"
-                        "font-family:'Space Mono',monospace;font-size:0.8rem;")
-                color_s = cell_bg(v, col) if v is not None else ""
-                if not color_s:
-                    if col == "Ticker":
-                        color_s = "color:#dde2ea;font-weight:700;font-family:'Syne',sans-serif;font-size:0.88rem;"
-                    elif col == "收盤":
-                        color_s = f"background:{bg};color:#c8ccd6;text-align:right;"
-                    elif col in style_cols:
-                        color_s = f"background:{bg};color:#2a3540;text-align:center;"
-                    else:
-                        color_s = f"background:{bg};color:#8b95a5;"
-                else:
-                    color_s += "text-align:center;"
-                display = fmt(v, col) if v is not None else "—"
-                raw = v if v is not None else ""
-                cells += f'<td style="{base+color_s}" data-val="{raw}" data-col="{col}">{display}</td>'
-            out += f'<tr>{cells}</tr>\n'
-        return out
-
-    rows_html = render_rows(js_rows)
-
-    sort_js = f"""
-<script>
-(function(){{
-  const ROWS   = {json.dumps(js_rows)};
-  const COLS   = {json.dumps(["_asset"] + all_cols)};
-  const STYLE_COLS = {json.dumps(style_cols)};
-  let sortCol = null, sortAsc = true;
-
-  function cellBg(v, col) {{
-    if (!STYLE_COLS.includes(col) || v === null) return "";
-    if (v > 0) {{
-      const a = (0.08 + 0.28 * Math.min(Math.abs(v)/15,1)).toFixed(2);
-      return `background:rgba(74,240,160,${{a}});color:#4af0a0;font-weight:700;text-align:center;`;
-    }} else if (v < 0) {{
-      const a = (0.08 + 0.28 * Math.min(Math.abs(v)/15,1)).toFixed(2);
-      return `background:rgba(240,90,74,${{a}});color:#f05a4a;font-weight:700;text-align:center;`;
-    }}
-    return "";
-  }}
-
-  function fmt(v, col) {{
-    if (v === null || v === "") return "—";
-    if (col === "收盤")  return parseFloat(v).toFixed(4);
-    if (STYLE_COLS.includes(col)) return (v >= 0 ? "+" : "") + parseFloat(v).toFixed(2) + "%";
-    return String(v);
-  }}
-
-  window.sortTable = function(colIdx) {{
-    const key = COLS[colIdx];
-    if (sortCol === key) {{ sortAsc = !sortAsc; }}
-    else {{ sortCol = key; sortAsc = (colIdx === 0); }}
-
-    // update sort icons
-    document.querySelectorAll(".sort-icon").forEach((el,i) => {{
-      el.textContent = "⇅"; el.style.color = "#3d5060";
-    }});
-    const si = document.getElementById("si"+colIdx);
-    if (si) {{ si.textContent = sortAsc ? "↑" : "↓"; si.style.color = "#4af0a0"; }}
-
-    const sorted = [...ROWS].sort((a,b) => {{
-      let av = a[key], bv = b[key];
-      if (av === null && bv === null) return 0;
-      if (av === null) return 1;
-      if (bv === null) return -1;
-      if (typeof av === "number") return sortAsc ? av-bv : bv-av;
-      return sortAsc ? String(av).localeCompare(String(bv))
-                     : String(bv).localeCompare(String(av));
-    }});
-
-    const tbody = document.getElementById("hm-tbody");
-    if (!tbody) return;
-    tbody.innerHTML = sorted.map((r,i) => {{
-      const bg = i%2===1 ? "#0a0d12" : "#0c0f14";
-      const idxS = `padding:10px 18px;background:${{bg}};color:#c8ccd6;` +
-        `font-family:'Syne',sans-serif;font-size:0.84rem;font-weight:600;` +
-        `border-bottom:1px solid #0d1018;border-right:2px solid #1a2535;` +
-        `white-space:nowrap;min-width:150px;`;
-      let cells = `<td style="${{idxS}}">${{r["_asset"]}}</td>`;
-      {json.dumps(all_cols)}.forEach(col => {{
-        const v = r[col];
-        const base = "padding:10px 18px;border-bottom:1px solid #0d1018;" +
-          "border-right:1px solid #0d1018;white-space:nowrap;" +
-          "font-family:'Space Mono',monospace;font-size:0.8rem;";
-        let cs = cellBg(v, col);
-        if (!cs) {{
-          if (col==="Ticker")      cs = "color:#dde2ea;font-weight:700;font-family:'Syne',sans-serif;font-size:0.88rem;";
-          else if (col==="收盤")   cs = `background:${{bg}};color:#c8ccd6;text-align:right;`;
-          else if (STYLE_COLS.includes(col)) cs = `background:${{bg}};color:#2a3540;text-align:center;`;
-          else                     cs = `background:${{bg}};color:#8b95a5;`;
-        }}
-        cells += `<td style="${{base+cs}}">${{fmt(v,col)}}</td>`;
-      }});
-      return `<tr>${{cells}}</tr>`;
-    }}).join("\n");
-  }};
-}})();
-</script>
-"""
-
-    table_html = f"""
-    <div class="heatmap-wrap">
-      <table id="hm-table" style="border-collapse:collapse;width:100%;table-layout:auto;">
-        <thead><tr>{headers_html}</tr></thead>
-        <tbody id="hm-tbody">{rows_html}</tbody>
-      </table>
-    </div>
-    <style>
-      .th-inner {{ display:flex;align-items:center;gap:6px; }}
-      .sort-icon {{ font-size:.75rem;color:#3d5060;transition:color .15s; }}
-      #hm-table th:hover .sort-icon {{ color:#8b95a5; }}
-    </style>
-    {sort_js}
-    """
-
-    st.markdown('<div class="section-title">資產表現一覽 <span style="font-size:.65rem;color:#3d5060;letter-spacing:.1em;">· 點擊欄標題排序</span></div>', unsafe_allow_html=True)
-    n_rows = len(df)
-    iframe_height = max(400, n_rows * 42 + 80)
-    full_html = f"""<!DOCTYPE html><html><head>
-<meta charset="utf-8">
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ background:#0c0f14; overflow-x:auto; }}
-  .heatmap-wrap {{
-    overflow-x:auto; background:#0c0f14;
-    border:1px solid #141c28; border-radius:10px;
-    box-shadow:0 4px 40px rgba(0,0,0,.6);
-  }}
-  .heatmap-wrap::-webkit-scrollbar {{ height:6px; }}
-  .heatmap-wrap::-webkit-scrollbar-track {{ background:#080b0f; }}
-  .heatmap-wrap::-webkit-scrollbar-thumb {{ background:#1e2d40; border-radius:3px; }}
-  .th-inner {{ display:flex; align-items:center; gap:6px; }}
-  .sort-icon {{ font-size:.75rem; color:#3d5060; transition:color .15s; }}
-  th:hover .sort-icon {{ color:#8b95a5; }}
-  tr {{ transition:background .1s; }}
-</style>
-</head><body>
-{table_html}
-</body></html>"""
-    components.html(full_html, height=iframe_height, scrolling=True)
+    st.dataframe(styled, use_container_width=True, height=min(900, len(df)*38+42))
 
     # save & download
     csv_file = f"market_heatmap_{date.today().isoformat()}.csv"
